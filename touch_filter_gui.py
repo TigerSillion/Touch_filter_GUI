@@ -373,9 +373,6 @@ class TouchFilterGUI(QMainWindow):
             self.current_y_range = None
             self.auto_range = True  # 是否使用自动范围
             
-            # 创建主菜单
-            self._create_menus()
-            
             # 创建状态栏
             self.statusBar = QStatusBar()
             self.setStatusBar(self.statusBar)
@@ -387,6 +384,13 @@ class TouchFilterGUI(QMainWindow):
             
             # 滤波器参数控件字典初始化
             self.filter_param_widgets = {}
+            # 初始化滤波器菜单操作字典
+            self.filter_menu_actions = {}
+            # 初始化滤波器复选框字典
+            self.filter_checkboxes = {}
+            
+            # 创建菜单栏
+            self._create_menus()
             
             # 创建图表区域
             self._create_plot_panel(main_layout)
@@ -416,6 +420,207 @@ class TouchFilterGUI(QMainWindow):
             logger.error(f"GUI初始化错误: {e}")
             logger.error(traceback.format_exc())
             raise
+    
+    def _create_filter_panel(self, parent_layout):
+        """创建滤波器设置面板"""
+        try:
+            logger.info("创建滤波器设置面板")
+            
+            # 创建滤波器设置组
+            filter_group = QGroupBox("可用滤波器")
+            filter_layout = QVBoxLayout()
+            
+            # 将可用滤波器以复选框形式列出
+            filter_types = [
+                'moving_average', 'median_filter', 'exponential_moving_average',
+                'butterworth_filter', 'savitzky_golay', 'threshold_filter',
+                'rate_limit_filter', 'group_average_filter'
+            ]
+            
+            # 滤波器列表容器
+            filter_scroll = QScrollArea()
+            filter_scroll.setWidgetResizable(True)
+            filter_widget = QWidget()
+            filter_widget_layout = QVBoxLayout(filter_widget)
+            
+            # 创建每个滤波器的复选框和参数控件
+            for filter_type in filter_types:
+                # 创建复选框，与菜单项保持同步
+                checkbox = QCheckBox(self._get_filter_display_name(filter_type))
+                checkbox.stateChanged.connect(lambda state, ft=filter_type: self.toggle_filter_params(ft, state == Qt.Checked))
+                self.filter_checkboxes[filter_type] = checkbox
+                filter_widget_layout.addWidget(checkbox)
+                
+                # 创建参数面板容器
+                param_widget = self._create_filter_param_widget(filter_type)
+                param_widget.hide()  # 初始隐藏
+                if filter_type not in self.filter_param_widgets:
+                    self.filter_param_widgets[filter_type] = []
+                self.filter_param_widgets[filter_type] = [param_widget]
+                filter_widget_layout.addWidget(param_widget)
+                filter_widget_layout.addSpacing(5)  # 添加间距
+            
+            # 添加滚动区域
+            filter_scroll.setWidget(filter_widget)
+            filter_layout.addWidget(filter_scroll)
+            filter_group.setLayout(filter_layout)
+            
+            # 创建操作按钮
+            button_layout = QHBoxLayout()
+            
+            # 应用滤波器按钮
+            self.apply_filters_btn = QPushButton("应用选中的滤波器")
+            self.apply_filters_btn.clicked.connect(self.apply_selected_filters)
+            button_layout.addWidget(self.apply_filters_btn)
+            
+            # 清除所有滤波器按钮
+            self.clear_filters_btn = QPushButton("清除所有滤波器")
+            self.clear_filters_btn.clicked.connect(self.clear_all_filters)
+            button_layout.addWidget(self.clear_filters_btn)
+            
+            # 创建面板容器
+            panel_container = QWidget()
+            panel_layout = QVBoxLayout(panel_container)
+            panel_layout.addWidget(filter_group)
+            panel_layout.addLayout(button_layout)
+            
+            # 添加到父布局
+            parent_layout.addWidget(panel_container)
+            
+            # 设置为可折叠面板
+            self.filter_scroll_area = filter_scroll
+            
+            logger.info("滤波器设置面板创建完成")
+        except Exception as e:
+            logger.error(f"创建滤波器设置面板错误: {e}")
+            logger.error(traceback.format_exc())
+    
+    def toggle_filter_params(self, filter_type, checked):
+        """切换滤波器参数面板的显示状态"""
+        try:
+            logger.info(f"切换'{filter_type}'滤波器参数控件显示: {'显示' if checked else '隐藏'}")
+            
+            # 确保滤波器菜单项和复选框状态同步
+            if filter_type in self.filter_menu_actions:
+                self.filter_menu_actions[filter_type].setChecked(checked)
+            
+            if filter_type in self.filter_checkboxes:
+                self.filter_checkboxes[filter_type].setChecked(checked)
+            
+            # 显示或隐藏参数控件
+            if filter_type in self.filter_param_widgets:
+                for widget in self.filter_param_widgets[filter_type]:
+                    if checked:
+                        widget.show()
+                    else:
+                        widget.hide()
+            
+            # 更新界面布局
+            if hasattr(self, 'filter_scroll_area'):
+                self.filter_scroll_area.updateGeometry()
+            
+            # 更新状态栏
+            display_name = self._get_filter_display_name(filter_type)
+            if checked:
+                self.statusBar.showMessage(f"已选择 {display_name} 滤波器")
+            else:
+                self.statusBar.showMessage(f"已取消选择 {display_name} 滤波器")
+                
+        except Exception as e:
+            logger.error(f"切换滤波器参数控件显示状态时出错: {e}")
+            logger.error(traceback.format_exc())
+            
+    def _create_menus(self):
+        """创建菜单栏和菜单项"""
+        try:
+            logger.info("创建菜单栏")
+            # 创建菜单栏
+            menubar = self.menuBar()
+            
+            # 文件菜单
+            file_menu = menubar.addMenu("文件")
+            
+            # 加载CSV文件动作
+            load_csv_action = QAction("加载CSV文件", self)
+            load_csv_action.triggered.connect(self.load_csv)
+            file_menu.addAction(load_csv_action)
+            
+            # 退出动作
+            exit_action = QAction("退出", self)
+            exit_action.triggered.connect(self.close)
+            file_menu.addAction(exit_action)
+            
+            # 波形选择菜单
+            self.waveform_selection_menu = menubar.addMenu("波形选择")
+            
+            # 坐标设置菜单
+            coordinate_menu = menubar.addMenu("坐标设置")
+            
+            # 应用坐标范围动作
+            apply_range_action = QAction("应用坐标范围", self)
+            apply_range_action.triggered.connect(self.apply_axis_range)
+            coordinate_menu.addAction(apply_range_action)
+            
+            # 重置缩放动作
+            reset_zoom_action = QAction("重置缩放", self)
+            reset_zoom_action.triggered.connect(self.reset_zoom)
+            coordinate_menu.addAction(reset_zoom_action)
+            
+            # 自动优化显示范围动作
+            optimize_action = QAction("优化显示范围", self)
+            optimize_action.triggered.connect(self.optimize_display_range)
+            coordinate_menu.addAction(optimize_action)
+            
+            # 滤波器菜单
+            filter_menu = menubar.addMenu("滤波器")
+            
+            # 为每种滤波器创建子菜单项
+            filter_types = [
+                'moving_average', 'median_filter', 'exponential_moving_average',
+                'butterworth_filter', 'savitzky_golay', 'threshold_filter',
+                'rate_limit_filter', 'group_average_filter'
+            ]
+            
+            # 为每个滤波器创建菜单项
+            for filter_type in filter_types:
+                # 创建可勾选的菜单项
+                action = QAction(self._get_filter_display_name(filter_type), self)
+                action.setCheckable(True)
+                action.triggered.connect(lambda checked, ft=filter_type: self.toggle_filter_from_menu(ft, checked))
+                filter_menu.addAction(action)
+                
+                # 保存菜单操作的引用
+                self.filter_menu_actions[filter_type] = action
+            
+            filter_menu.addSeparator()
+            
+            # 应用滤波器动作
+            apply_filters_action = QAction("应用选中的滤波器", self)
+            apply_filters_action.triggered.connect(self.apply_selected_filters)
+            filter_menu.addAction(apply_filters_action)
+            
+            # 清除滤波器动作
+            clear_filters_action = QAction("清除所有滤波器", self)
+            clear_filters_action.triggered.connect(self.clear_all_filters)
+            filter_menu.addAction(clear_filters_action)
+            
+            # 滤波器参数设置
+            filter_params_action = QAction("滤波器参数设置", self)
+            filter_params_action.triggered.connect(self.show_filter_settings_dialog)
+            filter_menu.addAction(filter_params_action)
+            
+            # 帮助菜单
+            help_menu = menubar.addMenu("帮助")
+            
+            # 关于动作
+            about_action = QAction("关于", self)
+            about_action.triggered.connect(self.show_about)
+            help_menu.addAction(about_action)
+            
+            logger.info("菜单栏创建完成")
+        except Exception as e:
+            logger.error(f"创建菜单栏错误: {e}")
+            logger.error(traceback.format_exc())
     
     def _create_plot_panel(self, parent_layout):
         """创建图表面板"""
@@ -473,6 +678,14 @@ class TouchFilterGUI(QMainWindow):
         try:
             widget = QWidget()
             layout = QVBoxLayout(widget)
+            
+            # 添加标题标签
+            title_label = QLabel(f"{self._get_filter_display_name(filter_type)}参数设置")
+            title_label.setAlignment(Qt.AlignCenter)
+            title_font = QFont()
+            title_font.setBold(True)
+            title_label.setFont(title_font)
+            layout.addWidget(title_label)
             
             if filter_type == 'moving_average':
                 # 移动平均滤波参数
@@ -567,11 +780,41 @@ class TouchFilterGUI(QMainWindow):
                 layout.addWidget(QLabel("公式(使用data表示输入数据):"))
                 layout.addWidget(self.formula_edit)
             
+            # 添加提示
+            help_text = ""
+            if filter_type == 'moving_average':
+                help_text = "移动平均滤波：通过计算窗口内数据的平均值来平滑数据"
+            elif filter_type == 'median_filter':
+                help_text = "中值滤波：使用窗口内数据的中位数来去除脉冲噪声"
+            elif filter_type == 'exponential_moving_average':
+                help_text = "指数移动平均：赋予近期数据更高权重的平滑方法"
+            elif filter_type == 'butterworth_filter':
+                help_text = "巴特沃斯滤波：低通滤波器，可以滤除高频噪声"
+            elif filter_type == 'savitzky_golay':
+                help_text = "Savitzky-Golay滤波：使用多项式拟合来平滑数据"
+            elif filter_type == 'threshold_filter':
+                help_text = "限幅滤波：当相邻点差值超过阈值时进行限制"
+            elif filter_type == 'rate_limit_filter':
+                help_text = "增幅限制滤波：限制数据变化率"
+            elif filter_type == 'group_average_filter':
+                help_text = "分组平均滤波：对数据分组并计算组内平均值"
+            
+            if help_text:
+                help_label = QLabel(help_text)
+                help_label.setWordWrap(True)
+                help_label.setStyleSheet("color: gray; font-size: 9pt;")
+                layout.addWidget(help_label)
+            
             return widget
         except Exception as e:
             logger.error(f"创建滤波器参数控件时出错: {e}")
             logger.error(traceback.format_exc())
-            return QWidget()  # 返回空控件，避免程序崩溃
+            empty_widget = QWidget()
+            empty_layout = QVBoxLayout(empty_widget)
+            error_label = QLabel(f"参数控件创建失败: {str(e)}")
+            error_label.setStyleSheet("color: red;")
+            empty_layout.addWidget(error_label)
+            return empty_widget  # 返回带有错误信息的控件
     
     def _initialize_filter_params(self):
         """初始化滤波器参数字典，不再单独创建控件，而是通过_create_filter_param_widget方法创建"""
@@ -584,29 +827,6 @@ class TouchFilterGUI(QMainWindow):
             logger.error(traceback.format_exc())
             QMessageBox.critical(self, "错误", f"初始化滤波器参数字典时出错:\n{str(e)}")
     
-    def toggle_filter_params(self, filter_type, checked):
-        """切换滤波器参数面板的显示状态"""
-        try:
-            logger.info(f"切换'{filter_type}'滤波器参数控件显示: {'显示' if checked else '隐藏'}")
-            
-            if filter_type in self.filter_param_widgets:
-                for widget in self.filter_param_widgets[filter_type]:
-                    if checked:
-                        widget.show()
-                    else:
-                        widget.hide()
-            
-            # 更新界面布局
-            if hasattr(self, 'filter_scroll_area'):
-                self.filter_scroll_area.updateGeometry()
-                
-            # 记录选中状态
-            if hasattr(self, 'filter_checkboxes') and filter_type in self.filter_checkboxes:
-                self.filter_checkboxes[filter_type].setChecked(checked)
-        except Exception as e:
-            logger.error(f"切换滤波器参数控件显示状态时出错: {e}")
-            logger.error(traceback.format_exc())
-    
     def apply_selected_filters(self):
         """应用所有选中的滤波器，为每个滤波器创建新的数据通道"""
         try:
@@ -616,7 +836,7 @@ class TouchFilterGUI(QMainWindow):
             active_filters = []
             has_checked = False
             
-            # 从菜单和复选框获取选中的滤波器
+            # 从菜单获取选中的滤波器
             for filter_type, action in self.filter_menu_actions.items():
                 if action.isChecked():
                     has_checked = True
@@ -695,12 +915,12 @@ class TouchFilterGUI(QMainWindow):
                                 filtered_style = WaveformStyle(
                                     color=self.darken_color(original_style.color),
                                     line_style=original_style.line_style,
-                                    line_width=original_style.line_width,
-                                    highlighted=original_style.highlighted
+                                    line_width=original_style.line_width * 1.2,  # 线宽加粗20%
+                                    highlighted=True  # 默认高亮显示滤波后的波形
                                 )
                                 self.waveform_data.styles[new_column_name] = filtered_style
                             
-                            # 添加到波形列表
+                            # 添加到波形列表并自动选中
                             item = QListWidgetItem(new_column_name)
                             self.waveform_list.addItem(item)
                             item.setSelected(True)  # 自动选中新添加的波形
@@ -726,10 +946,6 @@ class TouchFilterGUI(QMainWindow):
             # 更新样式列表
             if hasattr(self, 'update_style_list'):
                 self.update_style_list()
-            
-            # 更新波形菜单的选中状态
-            for column, action in self.waveform_actions.items():
-                action.setChecked(column in new_columns_added or column in selected_waveforms)
             
             # 更新图表
             self.update_plot()
@@ -781,33 +997,42 @@ class TouchFilterGUI(QMainWindow):
         try:
             logger.info(f"获取'{filter_type}'滤波器参数")
             
+            # 确保已经创建了滤波器参数控件
+            if filter_type not in self.filter_param_widgets or not self.filter_param_widgets[filter_type]:
+                param_widget = self._create_filter_param_widget(filter_type)
+                self.filter_param_widgets[filter_type] = [param_widget]
+                logger.info(f"为滤波器 {filter_type} 创建新的参数控件")
+            
             if filter_type == 'moving_average':
                 if not hasattr(self, 'ma_window'):
-                    raise ValueError('移动平均窗口控件未初始化')
+                    logger.warning('移动平均窗口控件未初始化，使用默认值')
+                    return {'window_size': 5}
                     
                 val = self.ma_window.text().strip()
                 logger.info(f"获取到窗口大小参数: {val}")
                 
                 if not val or not val.isdigit() or int(val) < 1:
-                    QMessageBox.warning(self, "参数错误", "移动平均窗口大小需为正整数")
-                    return None
+                    logger.warning("移动平均窗口大小参数无效，使用默认值")
+                    return {'window_size': 5}
                 return {'window_size': int(val)}
                 
             elif filter_type == 'median_filter':
                 if not hasattr(self, 'median_window'):
-                    raise ValueError('中值滤波窗口控件未初始化')
+                    logger.warning('中值滤波窗口控件未初始化，使用默认值')
+                    return {'window_size': 5}
                     
                 val = self.median_window.text().strip()
                 logger.info(f"获取到窗口大小参数: {val}")
                 
                 if not val or not val.isdigit() or int(val) < 1:
-                    QMessageBox.warning(self, "参数错误", "中值滤波窗口大小需为正整数")
-                    return None
+                    logger.warning("中值滤波窗口大小参数无效，使用默认值")
+                    return {'window_size': 5}
                 return {'window_size': int(val)}
                 
             elif filter_type == 'exponential_moving_average':
                 if not hasattr(self, 'ema_alpha'):
-                    raise ValueError('指数移动平均Alpha控件未初始化')
+                    logger.warning('指数移动平均Alpha控件未初始化，使用默认值')
+                    return {'alpha': 0.1}
                     
                 val = self.ema_alpha.text().strip()
                 logger.info(f"获取到Alpha参数: {val}")
@@ -815,98 +1040,104 @@ class TouchFilterGUI(QMainWindow):
                 try:
                     alpha = float(val)
                     if not (0 < alpha < 1):
-                        QMessageBox.warning(self, "参数错误", "Alpha值需在0和1之间")
-                        return None
+                        logger.warning("Alpha值参数无效，使用默认值")
+                        return {'alpha': 0.1}
                     return {'alpha': alpha}
                 except ValueError:
-                    QMessageBox.warning(self, "参数错误", "Alpha值需为有效的小数")
-                    return None
+                    logger.warning("Alpha值参数格式错误，使用默认值")
+                    return {'alpha': 0.1}
                 
             elif filter_type == 'butterworth_filter':
                 if not all(hasattr(self, attr) for attr in ['butter_cutoff', 'butter_fs', 'butter_order']):
-                    raise ValueError('巴特沃斯滤波参数控件未初始化')
+                    logger.warning('巴特沃斯滤波参数控件未初始化，使用默认值')
+                    return {'cutoff': 5.0, 'fs': 60.0, 'order': 3}
                     
                 try:
-                    cutoff = float(self.butter_cutoff.text().strip())
-                    fs = float(self.butter_fs.text().strip())
-                    order = int(self.butter_order.text().strip())
+                    cutoff = float(self.butter_cutoff.text().strip() or '5.0')
+                    fs = float(self.butter_fs.text().strip() or '60.0')
+                    order = int(self.butter_order.text().strip() or '3')
                     logger.info(f"获取到参数: cutoff={cutoff}, fs={fs}, order={order}")
                     
                     if cutoff <= 0 or fs <= 0 or order < 1:
-                        QMessageBox.warning(self, "参数错误", "所有参数需为正数且阶数大于0")
-                        return None
+                        logger.warning("巴特沃斯滤波参数无效，使用默认值")
+                        return {'cutoff': 5.0, 'fs': 60.0, 'order': 3}
                     return {'cutoff': cutoff, 'fs': fs, 'order': order}
                 except ValueError:
-                    QMessageBox.warning(self, "参数错误", "请输入有效的数值")
-                    return None
+                    logger.warning("巴特沃斯滤波参数格式错误，使用默认值")
+                    return {'cutoff': 5.0, 'fs': 60.0, 'order': 3}
                 
             elif filter_type == 'savitzky_golay':
                 if not all(hasattr(self, attr) for attr in ['sg_window', 'sg_order']):
-                    raise ValueError('Savitzky-Golay滤波参数控件未初始化')
+                    logger.warning('Savitzky-Golay滤波参数控件未初始化，使用默认值')
+                    return {'window_size': 5, 'order': 2}
                 
                 try:
-                    window_size = int(self.sg_window.text().strip())
-                    order = int(self.sg_order.text().strip())
+                    window_size = int(self.sg_window.text().strip() or '5')
+                    order = int(self.sg_order.text().strip() or '2')
                     logger.info(f"获取到参数: window_size={window_size}, order={order}")
                     
                     if window_size < 3 or order < 1 or window_size <= order:
-                        QMessageBox.warning(self, "参数错误", "窗口需大于阶数且不少于3")
-                        return None
+                        logger.warning("Savitzky-Golay滤波参数无效，使用默认值")
+                        return {'window_size': 5, 'order': 2}
                     return {'window_size': window_size, 'order': order}
                 except ValueError:
-                    QMessageBox.warning(self, "参数错误", "请输入有效的整数")
-                    return None
+                    logger.warning("Savitzky-Golay滤波参数格式错误，使用默认值")
+                    return {'window_size': 5, 'order': 2}
                 
             elif filter_type == 'threshold_filter':
                 if not hasattr(self, 'threshold_value'):
-                    raise ValueError('限幅滤波阈值控件未初始化')
+                    logger.warning('限幅滤波阈值控件未初始化，使用默认值')
+                    return {'threshold': 100}
                 
                 try:
-                    threshold = float(self.threshold_value.text().strip())
+                    threshold = float(self.threshold_value.text().strip() or '100')
                     logger.info(f"获取到阈值参数: {threshold}")
                     return {'threshold': threshold}
                 except ValueError:
-                    QMessageBox.warning(self, "参数错误", "阈值需为有效的数值")
-                    return None
+                    logger.warning("限幅滤波参数格式错误，使用默认值")
+                    return {'threshold': 100}
                 
             elif filter_type == 'rate_limit_filter':
                 if not hasattr(self, 'max_rate'):
-                    raise ValueError('增幅限制滤波率控件未初始化')
+                    logger.warning('增幅限制滤波率控件未初始化，使用默认值')
+                    return {'max_rate': 10}
                 
                 try:
-                    max_rate = float(self.max_rate.text().strip())
+                    max_rate = float(self.max_rate.text().strip() or '10')
                     logger.info(f"获取到最大变化率参数: {max_rate}")
                     return {'max_rate': max_rate}
                 except ValueError:
-                    QMessageBox.warning(self, "参数错误", "最大变化率需为有效的数值")
-                    return None
+                    logger.warning("增幅限制滤波参数格式错误，使用默认值")
+                    return {'max_rate': 10}
                 
             elif filter_type == 'group_average_filter':
                 if not hasattr(self, 'group_size'):
-                    raise ValueError('分组平均滤波组大小控件未初始化')
+                    logger.warning('分组平均滤波组大小控件未初始化，使用默认值')
+                    return {'group_size': 6}
                 
                 try:
-                    group_size = int(self.group_size.text().strip())
+                    group_size = int(self.group_size.text().strip() or '6')
                     logger.info(f"获取到组大小参数: {group_size}")
                     
                     if group_size < 2:
-                        QMessageBox.warning(self, "参数错误", "组大小需大于1")
-                        return None
+                        logger.warning("分组平均滤波参数无效，使用默认值")
+                        return {'group_size': 6}
                     return {'group_size': group_size}
                 except ValueError:
-                    QMessageBox.warning(self, "参数错误", "请输入有效的整数")
-                    return None
+                    logger.warning("分组平均滤波参数格式错误，使用默认值")
+                    return {'group_size': 6}
                 
             elif filter_type == 'custom':
                 if not hasattr(self, 'formula_edit'):
-                    raise ValueError('自定义公式控件未初始化')
+                    logger.warning('自定义公式控件未初始化，使用默认公式')
+                    return {'formula': 'data'}
                     
                 formula = self.formula_edit.toPlainText().strip()
                 logger.info(f"获取到公式: {formula}")
                 
                 if not formula:
-                    QMessageBox.warning(self, "参数错误", "自定义公式不能为空")
-                    return None
+                    logger.warning("自定义公式为空，使用默认公式")
+                    return {'formula': 'data'}
                 return {'formula': formula}
                 
             else:
@@ -916,8 +1147,22 @@ class TouchFilterGUI(QMainWindow):
         except Exception as e:
             logger.error(f"获取滤波器参数时出错: {e}")
             logger.error(traceback.format_exc())
-            QMessageBox.warning(self, "警告", f"获取滤波器参数时出错:\n{str(e)}")
-            return None
+            logger.warning(f"使用默认参数")
+            
+            # 出错时返回默认参数
+            default_params = {
+                'moving_average': {'window_size': 5},
+                'median_filter': {'window_size': 5},
+                'exponential_moving_average': {'alpha': 0.1},
+                'butterworth_filter': {'cutoff': 5.0, 'fs': 60.0, 'order': 3},
+                'savitzky_golay': {'window_size': 5, 'order': 2},
+                'threshold_filter': {'threshold': 100},
+                'rate_limit_filter': {'max_rate': 10},
+                'group_average_filter': {'group_size': 6},
+                'custom': {'formula': 'data'}
+            }
+            
+            return default_params.get(filter_type)
 
     def update_filter_code(self):
         """更新滤波器代码显示"""
@@ -1183,9 +1428,16 @@ class TouchFilterGUI(QMainWindow):
                     self.waveform_list.addItem(column)
                     logger.info(f"添加波形数据: {column}")
                     
-                    # 初始化波形样式
+                    # 初始化波形样式（使用渐变颜色）
                     if column not in self.waveform_data.styles:
-                        self.waveform_data.styles[column] = WaveformStyle()
+                        # 使用从matplotlib颜色映射获取颜色
+                        import matplotlib.cm as cm
+                        colors = cm.get_cmap('tab10', len(self.waveform_data.raw_data.columns))
+                        color_idx = list(self.waveform_data.raw_data.columns).index(column) % 10
+                        color_rgb = colors(color_idx)
+                        color_hex = f'#{int(color_rgb[0]*255):02x}{int(color_rgb[1]*255):02x}{int(color_rgb[2]*255):02x}'
+                        
+                        self.waveform_data.styles[column] = WaveformStyle(color=color_hex)
                     
                     # 添加到波形选择菜单
                     action = QAction(column, self)
@@ -1193,6 +1445,12 @@ class TouchFilterGUI(QMainWindow):
                     action.triggered.connect(lambda checked, col=column: self.toggle_waveform_selection(col, checked))
                     self.waveform_selection_menu.addAction(action)
                     self.waveform_actions[column] = action
+                
+                # 自动选中第一个波形
+                if self.waveform_list.count() > 0:
+                    self.waveform_list.item(0).setSelected(True)
+                    if self.waveform_list.item(0).text() in self.waveform_actions:
+                        self.waveform_actions[self.waveform_list.item(0).text()].setChecked(True)
                 
                 # 更新样式列表
                 if hasattr(self, 'update_style_list'):
@@ -1212,6 +1470,139 @@ class TouchFilterGUI(QMainWindow):
             logger.error(traceback.format_exc())
             QMessageBox.critical(self, "错误", f"加载文件时出错:\n{str(e)}")
             self.statusBar.showMessage("文件加载失败")
+            
+    def show_filter_settings_dialog(self):
+        """显示滤波器设置对话框"""
+        try:
+            logger.info("显示滤波器设置对话框")
+            
+            # 创建对话框
+            dialog = QDialog(self)
+            dialog.setWindowTitle("滤波器设置")
+            dialog.setMinimumWidth(600)
+            dialog.setMinimumHeight(700)
+            
+            # 创建布局
+            layout = QVBoxLayout(dialog)
+            
+            # 创建标题标签
+            title_label = QLabel("滤波器设置")
+            title_label.setAlignment(Qt.AlignCenter)
+            title_font = QFont()
+            title_font.setPointSize(14)
+            title_font.setBold(True)
+            title_label.setFont(title_font)
+            layout.addWidget(title_label)
+            
+            # 创建说明标签
+            help_label = QLabel("选择要应用的滤波器并设置参数")
+            help_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(help_label)
+            layout.addSpacing(10)
+            
+            # 滤波器列表
+            filter_types = [
+                'moving_average', 'median_filter', 'exponential_moving_average',
+                'butterworth_filter', 'savitzky_golay', 'threshold_filter',
+                'rate_limit_filter', 'group_average_filter'
+            ]
+            
+            # 保存对话框中的复选框和参数控件
+            dialog_filter_checkboxes = {}
+            
+            # 创建滚动区域
+            scroll_area = QScrollArea()
+            scroll_area.setWidgetResizable(True)
+            scroll_widget = QWidget()
+            scroll_layout = QVBoxLayout(scroll_widget)
+            
+            # 为每个滤波器创建复选框和参数控件
+            for filter_type in filter_types:
+                # 创建滤波器分组
+                filter_group = QGroupBox(self._get_filter_display_name(filter_type))
+                filter_group_layout = QVBoxLayout()
+                
+                # 创建复选框
+                checkbox = QCheckBox("启用此滤波器")
+                
+                # 如果已经在主界面选中，则在对话框中也选中
+                if filter_type in self.filter_menu_actions:
+                    checkbox.setChecked(self.filter_menu_actions[filter_type].isChecked())
+                
+                dialog_filter_checkboxes[filter_type] = checkbox
+                filter_group_layout.addWidget(checkbox)
+                
+                # 创建参数控件
+                param_widget = None
+                # 检查是否已有参数控件
+                if filter_type in self.filter_param_widgets and self.filter_param_widgets[filter_type]:
+                    param_widget = self.filter_param_widgets[filter_type][0]
+                else:
+                    param_widget = self._create_filter_param_widget(filter_type)
+                    self.filter_param_widgets[filter_type] = [param_widget]
+                
+                # 参数总是可见
+                param_widget.setVisible(True)
+                filter_group_layout.addWidget(param_widget)
+                
+                # 设置分组
+                filter_group.setLayout(filter_group_layout)
+                scroll_layout.addWidget(filter_group)
+                scroll_layout.addSpacing(10)
+            
+            # 设置滚动区域
+            scroll_area.setWidget(scroll_widget)
+            scroll_layout.addStretch(1)
+            layout.addWidget(scroll_area)
+            
+            # 创建按钮
+            button_box = QHBoxLayout()
+            apply_button = QPushButton("应用选择的滤波器")
+            close_button = QPushButton("关闭")
+            
+            # 应用按钮直接调用应用滤波器方法
+            apply_button.clicked.connect(lambda: self._apply_dialog_filter_settings(dialog_filter_checkboxes))
+            close_button.clicked.connect(dialog.accept)
+            
+            button_box.addWidget(apply_button)
+            button_box.addWidget(close_button)
+            layout.addLayout(button_box)
+            
+            # 显示对话框
+            dialog.exec_()
+            logger.info("滤波器设置对话框已关闭")
+            
+        except Exception as e:
+            logger.error(f"显示滤波器设置对话框错误: {e}")
+            logger.error(traceback.format_exc())
+            QMessageBox.critical(self, "错误", f"显示滤波器设置对话框时出错:\n{str(e)}")
+            
+    def _apply_dialog_filter_settings(self, dialog_filter_checkboxes):
+        """应用对话框中的滤波器设置"""
+        try:
+            logger.info("应用对话框中的滤波器设置")
+            
+            # 更新主界面上的复选框选中状态和菜单项选中状态
+            for filter_type, checkbox in dialog_filter_checkboxes.items():
+                # 更新复选框状态
+                if filter_type in self.filter_checkboxes:
+                    self.filter_checkboxes[filter_type].setChecked(checkbox.isChecked())
+                
+                # 更新菜单项状态
+                if filter_type in self.filter_menu_actions:
+                    self.filter_menu_actions[filter_type].setChecked(checkbox.isChecked())
+                    
+                # 切换参数面板显示
+                self.toggle_filter_params(filter_type, checkbox.isChecked())
+            
+            # 直接应用选中的滤波器
+            self.apply_selected_filters()
+            
+            self.statusBar.showMessage("滤波器设置已更新并应用")
+        except Exception as e:
+            logger.error(f"应用对话框滤波器设置错误: {e}")
+            logger.error(traceback.format_exc())
+            QMessageBox.critical(self, "错误", f"应用滤波器设置时出错:\n{str(e)}")
 
     def apply_axis_range(self):
         """应用用户设定的坐标轴范围"""
@@ -1362,6 +1753,34 @@ class TouchFilterGUI(QMainWindow):
             # 标记是否有保存的范围或当前范围
             has_range = (self.current_x_range is not None or current_xlim != (0, 1))
             
+            # 创建颜色映射，使原始波形和它的滤波后波形使用相似的颜色
+            color_map = {}
+            line_styles = ['-', '--', '-.', ':']  # 不同线型
+            
+            # 为每个原始波形分配一个颜色
+            filtered_columns = {}  # 存储原始波形和对应的滤波波形
+            for column in selected_waveforms:
+                # 检查是否是滤波后的波形
+                is_filtered = False
+                for filter_type in [self._get_filter_display_name(ft) for ft in self.filter_menu_actions.keys()]:
+                    if f"_{filter_type}" in column:
+                        is_filtered = True
+                        orig_name = column.split(f"_{filter_type}")[0]
+                        if orig_name not in filtered_columns:
+                            filtered_columns[orig_name] = []
+                        filtered_columns[orig_name].append(column)
+                        break
+                
+                # 如果不是滤波后的波形，则分配颜色
+                if not is_filtered and column not in color_map:
+                    if column in self.waveform_data.styles:
+                        color_map[column] = self.waveform_data.styles[column].color
+                    else:
+                        # 自动分配颜色
+                        import matplotlib.cm as cm
+                        colors = cm.get_cmap('tab10', len(selected_waveforms))
+                        color_map[column] = colors(len(color_map.keys()) % 10)
+            
             # 为每个选中的波形绘制曲线
             for i, column in enumerate(selected_waveforms):
                 logger.info(f"绘制波形 {i+1}/{len(selected_waveforms)}: {column}")
@@ -1391,6 +1810,7 @@ class TouchFilterGUI(QMainWindow):
                 # 检查列名是否包含滤波器名称（是否为滤波后的数据）
                 is_filtered_data = False
                 display_name = column
+                line_style = style.line_style
                 
                 # 检查是否是滤波后的数据通道
                 for filter_type in [self._get_filter_display_name(ft) for ft in self.filter_menu_actions.keys()]:
@@ -1398,6 +1818,11 @@ class TouchFilterGUI(QMainWindow):
                         is_filtered_data = True
                         orig_name = column.split(f"_{filter_type}")[0]
                         display_name = f"{orig_name} ({filter_type})"
+                        
+                        # 如果是滤波后的数据，使用虚线等不同线型
+                        if orig_name in filtered_columns:
+                            filter_index = filtered_columns[orig_name].index(column)
+                            line_style = line_styles[filter_index % len(line_styles)]
                         break
                 
                 # 绘制数据，使用自定义样式并启用拾取功能
@@ -1405,7 +1830,7 @@ class TouchFilterGUI(QMainWindow):
                 line = self.ax.plot(raw_data, 
                            label=display_name,
                            color=style.color,
-                           linestyle=style.line_style,
+                           linestyle=line_style,
                            linewidth=line_width,
                            picker=5)  # 开启拾取，容差为5像素
             
@@ -1638,82 +2063,6 @@ class TouchFilterGUI(QMainWindow):
             logger.error(f"切换状态数据选择错误: {e}")
             logger.error(traceback.format_exc())
 
-    def _create_filter_panel(self, parent_layout):
-        """创建滤波器设置面板"""
-        try:
-            logger.info("创建滤波器设置面板")
-            
-            # 创建滤波器设置组
-            filter_group = QGroupBox("可用滤波器")
-            filter_layout = QVBoxLayout()
-            
-            # 将可用滤波器以复选框形式列出
-            filter_types = [
-                'moving_average', 'median_filter', 'exponential_moving_average',
-                'butterworth_filter', 'savitzky_golay', 'threshold_filter',
-                'rate_limit_filter', 'group_average_filter'
-            ]
-            
-            # 初始化滤波器复选框字典
-            self.filter_checkboxes = {}
-            
-            # 确保filter_param_widgets已经初始化
-            if not hasattr(self, 'filter_param_widgets'):
-                self.filter_param_widgets = {}
-            
-            for filter_type in filter_types:
-                # 创建复选框，与菜单项保持同步
-                checkbox = QCheckBox(self._get_filter_display_name(filter_type))
-                checkbox.stateChanged.connect(lambda state, ft=filter_type: self.toggle_filter_params(ft, state == Qt.Checked))
-                
-                # 如果已经在菜单中选中，同步选中状态
-                if filter_type in self.filter_menu_actions:
-                    checkbox.setChecked(self.filter_menu_actions[filter_type].isChecked())
-                
-                self.filter_checkboxes[filter_type] = checkbox
-                filter_layout.addWidget(checkbox)
-                
-                # 创建参数面板
-                param_widget = self._create_filter_param_widget(filter_type)
-                param_widget.hide()  # 初始隐藏
-                self.filter_param_widgets[filter_type] = param_widget
-                filter_layout.addWidget(param_widget)
-            
-            filter_group.setLayout(filter_layout)
-            
-            # 创建操作按钮
-            button_layout = QHBoxLayout()
-            
-            # 应用滤波器按钮
-            self.apply_filters_btn = QPushButton("应用选中的滤波器")
-            self.apply_filters_btn.clicked.connect(self.apply_selected_filters)
-            button_layout.addWidget(self.apply_filters_btn)
-            
-            # 清除所有滤波器按钮
-            self.clear_filters_btn = QPushButton("清除所有滤波器")
-            self.clear_filters_btn.clicked.connect(self.clear_all_filters)
-            button_layout.addWidget(self.clear_filters_btn)
-            
-            # 创建滚动区域来包含滤波器设置
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            filter_container = QWidget()
-            filter_container_layout = QVBoxLayout(filter_container)
-            filter_container_layout.addWidget(filter_group)
-            filter_container_layout.addLayout(button_layout)
-            scroll_area.setWidget(filter_container)
-            
-            # 设置最大高度，避免占用太多空间
-            scroll_area.setMaximumHeight(400)
-            
-            # 添加到父布局
-            parent_layout.addWidget(scroll_area)
-            
-            logger.info("滤波器设置面板创建完成")
-        except Exception as e:
-            logger.error(f"创建滤波器设置面板错误: {e}")
-            logger.error(traceback.format_exc())
-
     def _get_filter_display_name(self, filter_type):
         """获取滤波器类型对应的显示名称"""
         try:
@@ -1745,6 +2094,18 @@ class TouchFilterGUI(QMainWindow):
                 if item.isSelected():
                     selected_waveforms.append(item.text())
                     
+            # 如果没有选中的波形，尝试从波形动作中获取
+            if not selected_waveforms and hasattr(self, 'waveform_actions'):
+                for column, action in self.waveform_actions.items():
+                    if action.isChecked():
+                        selected_waveforms.append(column)
+                        
+                        # 同步选中状态到内部列表
+                        for i in range(self.waveform_list.count()):
+                            item = self.waveform_list.item(i)
+                            if item.text() == column and not item.isSelected():
+                                item.setSelected(True)
+                    
             logger.info(f"获取到选中波形: {selected_waveforms}")
             return selected_waveforms
         except Exception as e:
@@ -1758,11 +2119,21 @@ class TouchFilterGUI(QMainWindow):
             logger.info(f"切换波形'{column}'选择状态: {'选中' if checked else '取消选中'}")
             
             # 在内部列表中设置选中状态
+            item_found = False
             for i in range(self.waveform_list.count()):
                 item = self.waveform_list.item(i)
                 if item.text() == column:
                     item.setSelected(checked)
+                    item_found = True
                     break
+            
+            # 如果在内部列表中没有找到，可能是因为列表还没有初始化
+            if not item_found:
+                logger.warning(f"在波形列表中找不到 {column}")
+                
+            # 同步菜单项选中状态
+            if hasattr(self, 'waveform_actions') and column in self.waveform_actions:
+                self.waveform_actions[column].setChecked(checked)
             
             # 更新图表
             self.update_plot()
@@ -1775,207 +2146,7 @@ class TouchFilterGUI(QMainWindow):
         except Exception as e:
             logger.error(f"切换波形选择状态错误: {e}")
             logger.error(traceback.format_exc())
-
-    def _create_menus(self):
-        """创建菜单栏和菜单项"""
-        try:
-            logger.info("创建菜单栏")
-            # 创建菜单栏
-            menubar = self.menuBar()
             
-            # 文件菜单
-            file_menu = menubar.addMenu("文件")
-            
-            # 加载CSV文件动作
-            load_csv_action = QAction("加载CSV文件", self)
-            load_csv_action.triggered.connect(self.load_csv)
-            file_menu.addAction(load_csv_action)
-            
-            # 退出动作
-            exit_action = QAction("退出", self)
-            exit_action.triggered.connect(self.close)
-            file_menu.addAction(exit_action)
-            
-            # 波形选择菜单
-            self.waveform_selection_menu = menubar.addMenu("波形选择")
-            
-            # 坐标设置菜单
-            coordinate_menu = menubar.addMenu("坐标设置")
-            
-            # 应用坐标范围动作
-            apply_range_action = QAction("应用坐标范围", self)
-            apply_range_action.triggered.connect(self.apply_axis_range)
-            coordinate_menu.addAction(apply_range_action)
-            
-            # 重置缩放动作
-            reset_zoom_action = QAction("重置缩放", self)
-            reset_zoom_action.triggered.connect(self.reset_zoom)
-            coordinate_menu.addAction(reset_zoom_action)
-            
-            # 自动优化显示范围动作
-            optimize_action = QAction("优化显示范围", self)
-            optimize_action.triggered.connect(self.optimize_display_range)
-            coordinate_menu.addAction(optimize_action)
-            
-            # 滤波器菜单
-            filter_menu = menubar.addMenu("滤波器")
-            
-            # 为每种滤波器创建子菜单项
-            filter_types = [
-                'moving_average', 'median_filter', 'exponential_moving_average',
-                'butterworth_filter', 'savitzky_golay', 'threshold_filter',
-                'rate_limit_filter', 'group_average_filter'
-            ]
-            
-            # 初始化滤波器菜单操作字典
-            self.filter_menu_actions = {}
-            
-            # 为每个滤波器创建菜单项
-            for filter_type in filter_types:
-                # 创建可勾选的菜单项
-                action = QAction(self._get_filter_display_name(filter_type), self)
-                action.setCheckable(True)
-                action.triggered.connect(lambda checked, ft=filter_type: self.toggle_filter_from_menu(ft, checked))
-                filter_menu.addAction(action)
-                
-                # 保存菜单操作的引用
-                self.filter_menu_actions[filter_type] = action
-            
-            filter_menu.addSeparator()
-            
-            # 应用滤波器动作
-            apply_filters_action = QAction("应用选中的滤波器", self)
-            apply_filters_action.triggered.connect(self.apply_selected_filters)
-            filter_menu.addAction(apply_filters_action)
-            
-            # 滤波器参数设置
-            filter_params_action = QAction("滤波器参数设置", self)
-            filter_params_action.triggered.connect(self.show_filter_settings_dialog)
-            filter_menu.addAction(filter_params_action)
-            
-            # 帮助菜单
-            help_menu = menubar.addMenu("帮助")
-            
-            # 关于动作
-            about_action = QAction("关于", self)
-            about_action.triggered.connect(self.show_about)
-            help_menu.addAction(about_action)
-            
-            logger.info("菜单栏创建完成")
-        except Exception as e:
-            logger.error(f"创建菜单栏错误: {e}")
-            logger.error(traceback.format_exc())
-
-    def show_filter_settings_dialog(self):
-        """显示滤波器设置对话框"""
-        try:
-            logger.info("显示滤波器设置对话框")
-            
-            # 创建对话框
-            dialog = QDialog(self)
-            dialog.setWindowTitle("滤波器设置")
-            dialog.setMinimumWidth(500)
-            dialog.setMinimumHeight(600)
-            
-            # 创建布局
-            layout = QVBoxLayout(dialog)
-            
-            # 创建滤波器组
-            filter_group = QGroupBox("可用滤波器")
-            filter_layout = QVBoxLayout()
-            
-            # 滤波器列表
-            filter_types = [
-                'moving_average', 'median_filter', 'exponential_moving_average',
-                'butterworth_filter', 'savitzky_golay', 'threshold_filter',
-                'rate_limit_filter', 'group_average_filter'
-            ]
-            
-            # 保存对话框中的复选框和参数控件
-            dialog_filter_checkboxes = {}
-            dialog_param_widgets = {}
-            
-            # 创建滚动区域
-            scroll_area = QScrollArea()
-            scroll_area.setWidgetResizable(True)
-            scroll_widget = QWidget()
-            scroll_layout = QVBoxLayout(scroll_widget)
-            
-            # 为每个滤波器创建复选框和参数控件
-            for filter_type in filter_types:
-                # 创建复选框
-                checkbox = QCheckBox(self._get_filter_display_name(filter_type))
-                
-                # 如果已经在主界面选中，则在对话框中也选中
-                if filter_type in self.filter_menu_actions:
-                    checkbox.setChecked(self.filter_menu_actions[filter_type].isChecked())
-                
-                dialog_filter_checkboxes[filter_type] = checkbox
-                scroll_layout.addWidget(checkbox)
-                
-                # 创建参数控件（如果已经存在，使用已有的；否则创建新的）
-                if filter_type in self.filter_param_widgets and self.filter_param_widgets[filter_type]:
-                    param_widget = self.filter_param_widgets[filter_type][0]
-                else:
-                    param_widget = self._create_filter_param_widget(filter_type)
-                    self.filter_param_widgets[filter_type] = [param_widget]
-                
-                # 设置初始可见性
-                param_widget.setVisible(checkbox.isChecked())
-                
-                # 连接信号
-                checkbox.stateChanged.connect(lambda state, w=param_widget: w.setVisible(state))
-                
-                scroll_layout.addWidget(param_widget)
-                scroll_layout.addSpacing(10)  # 添加间距
-                
-                # 保存参数控件引用
-                dialog_param_widgets[filter_type] = param_widget
-            
-            # 设置滚动区域
-            scroll_area.setWidget(scroll_widget)
-            scroll_layout.addStretch(1)
-            
-            filter_group.setLayout(filter_layout)
-            filter_layout.addWidget(scroll_area)
-            layout.addWidget(filter_group)
-            
-            # 创建按钮
-            button_box = QHBoxLayout()
-            ok_button = QPushButton("确定")
-            cancel_button = QPushButton("取消")
-            
-            ok_button.clicked.connect(dialog.accept)
-            cancel_button.clicked.connect(dialog.reject)
-            
-            button_box.addWidget(ok_button)
-            button_box.addWidget(cancel_button)
-            layout.addLayout(button_box)
-            
-            # 显示对话框
-            if dialog.exec_() == QDialog.Accepted:
-                logger.info("应用滤波器设置")
-                
-                # 更新主界面上的复选框选中状态和菜单项选中状态
-                for filter_type, checkbox in dialog_filter_checkboxes.items():
-                    # 更新复选框状态
-                    if filter_type in self.filter_checkboxes:
-                        self.filter_checkboxes[filter_type].setChecked(checkbox.isChecked())
-                    
-                    # 更新菜单项状态
-                    if filter_type in self.filter_menu_actions:
-                        self.filter_menu_actions[filter_type].setChecked(checkbox.isChecked())
-                
-                self.statusBar.showMessage("滤波器设置已更新")
-            else:
-                logger.info("取消滤波器设置")
-                
-            logger.info("滤波器设置对话框处理完成")
-        except Exception as e:
-            logger.error(f"显示滤波器设置对话框错误: {e}")
-            logger.error(traceback.format_exc())
-            QMessageBox.critical(self, "错误", f"显示滤波器设置对话框时出错:\n{str(e)}")
-
     def toggle_filter_from_menu(self, filter_type, checked):
         """通过菜单切换滤波器的勾选状态"""
         try:
